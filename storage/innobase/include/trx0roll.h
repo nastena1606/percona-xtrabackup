@@ -178,8 +178,6 @@ struct trx_named_savept_t {
                   transaction */
 };
 
-UT_LIST_NODE_GETTER_DEFINITION(trx_named_savept_t, trx_savepoints)
-
 #include "trx0roll.ic"
 
 #endif

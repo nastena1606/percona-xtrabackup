@@ -1526,7 +1526,8 @@ static inline void buf_LRU_remove_block(buf_page_t *bpage) {
   /* If the LRU list is so short that LRU_old is not defined,
   clear the "old" flags and return */
   if (UT_LIST_GET_LEN(buf_pool->LRU) < BUF_LRU_OLD_MIN_LEN) {
-    for (auto bpage : buf_pool->LRU) {
+    for (buf_page_t *bpage = UT_LIST_GET_FIRST(buf_pool->LRU); bpage != nullptr;
+         bpage = UT_LIST_GET_NEXT(LRU, bpage)) {
       /* This loop temporarily violates the
       assertions of buf_page_set_old(). */
       bpage->old = FALSE;
@@ -2402,7 +2403,8 @@ static void buf_LRU_validate_instance(buf_pool_t *buf_pool) {
 
   ulint old_len = 0;
 
-  for (auto bpage : buf_pool->LRU) {
+  for (buf_page_t *bpage = UT_LIST_GET_FIRST(buf_pool->LRU); bpage != nullptr;
+       bpage = UT_LIST_GET_NEXT(LRU, bpage)) {
     switch (buf_page_get_state(bpage)) {
       case BUF_BLOCK_POOL_WATCH:
       case BUF_BLOCK_NOT_USED:
@@ -2441,7 +2443,8 @@ static void buf_LRU_validate_instance(buf_pool_t *buf_pool) {
 
   CheckInFreeList::validate(buf_pool);
 
-  for (auto bpage : buf_pool->free) {
+  for (buf_page_t *bpage = UT_LIST_GET_FIRST(buf_pool->free); bpage != nullptr;
+       bpage = UT_LIST_GET_NEXT(list, bpage)) {
     ut_a(buf_page_get_state(bpage) == BUF_BLOCK_NOT_USED);
   }
 
@@ -2451,7 +2454,8 @@ static void buf_LRU_validate_instance(buf_pool_t *buf_pool) {
 
   CheckUnzipLRUAndLRUList::validate(buf_pool);
 
-  for (auto block : buf_pool->unzip_LRU) {
+  for (buf_block_t *block = UT_LIST_GET_FIRST(buf_pool->unzip_LRU);
+       block != nullptr; block = UT_LIST_GET_NEXT(unzip_LRU, block)) {
     ut_ad(block->in_unzip_LRU_list);
     ut_ad(block->page.in_LRU_list);
     ut_a(buf_page_belongs_to_unzip_LRU(&block->page));
@@ -2478,7 +2482,8 @@ Space_References buf_LRU_count_space_references() {
 
     mutex_enter(&buf_pool->LRU_list_mutex);
 
-    for (auto bpage : buf_pool->LRU) {
+    for (const buf_page_t *bpage = UT_LIST_GET_FIRST(buf_pool->LRU);
+         bpage != nullptr; bpage = UT_LIST_GET_NEXT(LRU, bpage)) {
       /* We have the LRU mutex, it is safe to assume the space ID will not be
       changed, as it would require removal from the LRU first. */
       result[bpage->get_space()]++;
@@ -2509,7 +2514,8 @@ Space_References buf_LRU_count_space_references() {
 static void buf_LRU_print_instance(buf_pool_t *buf_pool) {
   mutex_enter(&buf_pool->LRU_list_mutex);
 
-  for (auto bpage : buf_pool->LRU) {
+  for (const buf_page_t *bpage = UT_LIST_GET_FIRST(buf_pool->LRU);
+       bpage != nullptr; bpage = UT_LIST_GET_NEXT(LRU, bpage)) {
     mutex_enter(buf_page_get_mutex(bpage));
 
     fprintf(stderr, "BLOCK space " UINT32PF " page " UINT32PF " ",

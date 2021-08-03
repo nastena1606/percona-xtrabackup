@@ -2235,6 +2235,7 @@ static MY_ATTRIBUTE((warn_unused_result))
 @return number of undo log pages handled in the batch */
 static ulint trx_purge_attach_undo_recs(const ulint n_purge_threads,
                                         ulint batch_size) {
+  que_thr_t *thr;
   ulint n_pages_handled = 0;
 
   ut_a(n_purge_threads > 0);
@@ -2247,8 +2248,9 @@ static ulint trx_purge_attach_undo_recs(const ulint n_purge_threads,
   /* Validate some pre-requisites and reset done flag. */
   ulint i = 0;
 
-  for (auto thr : purge_sys->query->thrs) {
-    if (n_purge_threads <= i) break;
+  for (thr = UT_LIST_GET_FIRST(purge_sys->query->thrs);
+       thr != nullptr && i < n_purge_threads;
+       thr = UT_LIST_GET_NEXT(thrs, thr), ++i) {
     purge_node_t *node;
 
     /* Get the purge node. */
@@ -2262,7 +2264,7 @@ static ulint trx_purge_attach_undo_recs(const ulint n_purge_threads,
 
     ut_a(!thr->is_active);
 
-    run_thrs[i++] = thr;
+    run_thrs[i] = thr;
   }
 
   /* There should never be fewer nodes than threads, the inverse

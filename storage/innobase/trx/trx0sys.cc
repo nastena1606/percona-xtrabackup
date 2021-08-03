@@ -164,7 +164,8 @@ void trx_sys_get_binlog_prepared(std::vector<trx_id_t> &trx_ids) {
     return;
   }
   /* Check and find binary log prepared transaction. */
-  for (auto trx : trx_sys->rw_trx_list) {
+  for (auto trx = UT_LIST_GET_FIRST(trx_sys->rw_trx_list); trx != nullptr;
+       trx = UT_LIST_GET_NEXT(trx_list, trx)) {
     assert_trx_in_rw_list(trx);
     if (trx_state_eq(trx, TRX_STATE_PREPARED) && trx_is_mysql_xa(trx)) {
       trx_ids.push_back(trx->id);
@@ -565,7 +566,10 @@ purge_pq_t *trx_sys_init_at_db_start(void) {
   trx_sys_mutex_enter();
 
   if (UT_LIST_GET_LEN(trx_sys->rw_trx_list) > 0) {
-    for (auto trx : trx_sys->rw_trx_list) {
+    const trx_t *trx;
+
+    for (trx = UT_LIST_GET_FIRST(trx_sys->rw_trx_list); trx != nullptr;
+         trx = UT_LIST_GET_NEXT(trx_list, trx)) {
       ut_ad(trx->is_recovered);
       assert_trx_in_rw_list(trx);
 
@@ -605,9 +609,9 @@ void trx_sys_create(void) {
   mutex_create(LATCH_ID_TRX_SYS, &trx_sys->mutex);
   mutex_create(LATCH_ID_TRX_SYS_SERIALISATION, &trx_sys->serialisation_mutex);
 
-  UT_LIST_INIT(trx_sys->serialisation_list);
-  UT_LIST_INIT(trx_sys->rw_trx_list);
-  UT_LIST_INIT(trx_sys->mysql_trx_list);
+  UT_LIST_INIT(trx_sys->serialisation_list, &trx_t::no_list);
+  UT_LIST_INIT(trx_sys->rw_trx_list, &trx_t::trx_list);
+  UT_LIST_INIT(trx_sys->mysql_trx_list, &trx_t::mysql_trx_list);
 
   trx_sys->mvcc = UT_NEW_NOKEY(MVCC(1024));
 
@@ -670,7 +674,8 @@ void trx_sys_close(void) {
   shutdown). Free all of them. */
   ut_d(trx_sys_after_background_threads_shutdown_validate());
 
-  while (auto trx = UT_LIST_GET_FIRST(trx_sys->rw_trx_list)) {
+  for (trx_t *trx = UT_LIST_GET_FIRST(trx_sys->rw_trx_list); trx != nullptr;
+       trx = UT_LIST_GET_FIRST(trx_sys->rw_trx_list)) {
     trx_free_prepared_or_active_recovered(trx);
   }
 
@@ -713,7 +718,8 @@ void trx_sys_before_pre_dd_shutdown_validate() {
   mysql_trx_list so we don't have to add logic to skip these at shutdown.
   */
   trx_sys_mutex_enter();
-  for (auto trx : trx_sys->mysql_trx_list) {
+  for (trx_t *trx = UT_LIST_GET_FIRST(trx_sys->mysql_trx_list); trx != nullptr;
+       trx = UT_LIST_GET_NEXT(mysql_trx_list, trx)) {
     /** Skip purge thread trx, it will be cleared after purge sys shutdown */
     if (trx->purge_sys_trx) {
       continue;
@@ -727,8 +733,9 @@ void trx_sys_after_pre_dd_shutdown_validate() {
   trx_sys_mutex_enter();
   /** At this point we check the mysql_trx_list again, now we don't expect purge
   thread transactions in the list */
-  for (auto trx : trx_sys->mysql_trx_list) {
-    ut_a(trx->state.load(std::memory_order_relaxed) == TRX_STATE_NOT_STARTED);
+  for (trx_t *trx = UT_LIST_GET_FIRST(trx_sys->mysql_trx_list); trx != nullptr;
+       trx = UT_LIST_GET_NEXT(mysql_trx_list, trx)) {
+    ut_a(trx->state == TRX_STATE_NOT_STARTED);
   }
   trx_sys_mutex_exit();
 
@@ -766,7 +773,8 @@ size_t trx_sys_recovered_active_trxs_count() {
   trx_sys_mutex_enter();
   /* Recovered transactions are never citizens of mysql_trx_list,
   so it's enough to check rw_trx_list. */
-  for (auto trx : trx_sys->rw_trx_list) {
+  for (trx_t *trx = UT_LIST_GET_FIRST(trx_sys->rw_trx_list); trx != nullptr;
+       trx = UT_LIST_GET_NEXT(trx_list, trx)) {
     if (trx_state_eq(trx, TRX_STATE_ACTIVE) && trx->is_recovered) {
       total_trx++;
     }
@@ -776,18 +784,33 @@ size_t trx_sys_recovered_active_trxs_count() {
 }
 
 #ifdef UNIV_DEBUG
+/** Validate the trx_ut_list_t.
+ @return true if valid. */
+static bool trx_sys_validate_trx_list_low(
+    trx_ut_list_t *trx_list) /*!< in: &trx_sys->rw_trx_list */
+{
+  const trx_t *trx;
+  const trx_t *prev_trx = nullptr;
+
+  ut_ad(trx_sys_mutex_own());
+
+  ut_ad(trx_list == &trx_sys->rw_trx_list);
+
+  for (trx = UT_LIST_GET_FIRST(*trx_list); trx != nullptr;
+       prev_trx = trx, trx = UT_LIST_GET_NEXT(trx_list, prev_trx)) {
+    check_trx_state(trx);
+    ut_a(prev_trx == nullptr || prev_trx->id > trx->id);
+  }
+
+  return (true);
+}
+
 /** Validate the trx_sys_t::rw_trx_list.
  @return true if the list is valid. */
 bool trx_sys_validate_trx_list() {
   ut_ad(trx_sys_mutex_own());
 
-  const trx_t *prev_trx = nullptr;
-
-  for (auto trx : trx_sys->rw_trx_list) {
-    check_trx_state(trx);
-    ut_a(prev_trx == nullptr || prev_trx->id > trx->id);
-    prev_trx = trx;
-  }
+  ut_a(trx_sys_validate_trx_list_low(&trx_sys->rw_trx_list));
 
   return (true);
 }

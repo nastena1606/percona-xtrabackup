@@ -241,22 +241,21 @@ struct trx_rseg_t {
   page_no_t curr_size{};
 
  public:
-  using Undo_list = UT_LIST_BASE_NODE_T_EXTERN(trx_undo_t, undo_list);
   /*--------------------------------------------------------*/
   /* Fields for update undo logs */
   /** List of update undo logs */
-  Undo_list update_undo_list;
+  UT_LIST_BASE_NODE_T(trx_undo_t) update_undo_list;
 
   /** List of update undo log segments cached for fast reuse */
-  Undo_list update_undo_cached;
+  UT_LIST_BASE_NODE_T(trx_undo_t) update_undo_cached;
 
   /*--------------------------------------------------------*/
   /* Fields for insert undo logs */
   /** List of insert undo logs */
-  Undo_list insert_undo_list;
+  UT_LIST_BASE_NODE_T(trx_undo_t) insert_undo_list;
 
   /** List of insert undo log segments cached for fast reuse */
-  Undo_list insert_undo_cached;
+  UT_LIST_BASE_NODE_T(trx_undo_t) insert_undo_cached;
 
   /*--------------------------------------------------------*/
 

@@ -141,7 +141,7 @@ sensible, and does not build a hash index if not.
 @param[in]	left_side	hash for searches from left side */
 static void btr_search_build_page_hash_index(dict_index_t *index,
                                              buf_block_t *block, ulint n_fields,
-                                             ulint n_bytes, bool left_side);
+                                             ulint n_bytes, ibool left_side);
 
 /** This function should be called before reserving any btr search mutex, if
 the intended operation might add nodes to the search system hash table.
@@ -299,6 +299,8 @@ static void btr_search_disable_ref_count(dict_table_t *table) {
 /** Disable the adaptive hash search system and empty the index.
 @param[in]	need_mutex	Need to acquire dict_sys->mutex */
 void btr_search_disable(bool need_mutex) {
+  dict_table_t *table;
+
   if (need_mutex) {
     dict_sys_mutex_enter();
   }
@@ -319,11 +321,13 @@ void btr_search_disable(bool need_mutex) {
 
   /* Clear the index->search_info->ref_count of every index in
   the data dictionary cache. */
-  for (auto table : dict_sys->table_LRU) {
+  for (table = UT_LIST_GET_FIRST(dict_sys->table_LRU); table;
+       table = UT_LIST_GET_NEXT(table_LRU, table)) {
     btr_search_disable_ref_count(table);
   }
 
-  for (auto table : dict_sys->table_non_LRU) {
+  for (table = UT_LIST_GET_FIRST(dict_sys->table_non_LRU); table;
+       table = UT_LIST_GET_NEXT(table_LRU, table)) {
     btr_search_disable_ref_count(table);
   }
 
@@ -384,7 +388,7 @@ btr_search_t *btr_search_info_create(mem_heap_t *heap) {
   info->n_fields = 1;
   info->n_bytes = 0;
 
-  info->left_side = true;
+  info->left_side = TRUE;
 
   return (info);
 }
@@ -480,7 +484,7 @@ set_new_recomm:
     info->n_fields = 1;
     info->n_bytes = 0;
 
-    info->left_side = true;
+    info->left_side = TRUE;
 
   } else if (cmp > 0) {
     info->n_hash_potential = 1;
@@ -497,7 +501,7 @@ set_new_recomm:
       info->n_bytes = cursor->low_bytes + 1;
     }
 
-    info->left_side = true;
+    info->left_side = TRUE;
   } else {
     info->n_hash_potential = 1;
 
@@ -512,7 +516,7 @@ set_new_recomm:
       info->n_bytes = cursor->up_bytes + 1;
     }
 
-    info->left_side = false;
+    info->left_side = FALSE;
   }
 }
 
@@ -1395,7 +1399,7 @@ sensible, and does not build a hash index if not.
 @param[in]	left_side	hash for searches from left side */
 static void btr_search_build_page_hash_index(dict_index_t *index,
                                              buf_block_t *block, ulint n_fields,
-                                             ulint n_bytes, bool left_side) {
+                                             ulint n_bytes, ibool left_side) {
   hash_table_t *table;
   page_t *page;
   rec_t *rec;
@@ -1611,7 +1615,7 @@ void btr_search_move_or_delete_hash_entries(buf_block_t *new_block,
   if (block->index) {
     ulint n_fields = block->curr_n_fields;
     ulint n_bytes = block->curr_n_bytes;
-    bool left_side = block->curr_left_side;
+    ibool left_side = block->curr_left_side;
 
     new_block->n_fields = block->curr_n_fields;
     new_block->n_bytes = block->curr_n_bytes;

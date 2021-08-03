@@ -724,7 +724,7 @@ in a traditional Unix implementation. */
 struct srv_sys_t {
   ib_mutex_t tasks_mutex; /*!< variable protecting the
                           tasks queue */
-  UT_LIST_BASE_NODE_T(que_thr_t, queue)
+  UT_LIST_BASE_NODE_T(que_thr_t)
   tasks; /*!< task queue */
 
   ib_mutex_t mutex;    /*!< variable protecting the
@@ -1139,7 +1139,7 @@ static void srv_init(void) {
 
     buf_flush_tick_event = os_event_create();
 
-    UT_LIST_INIT(srv_sys->tasks);
+    UT_LIST_INIT(srv_sys->tasks, &que_thr_t::queue);
   }
 
   srv_buf_resize_event = os_event_create();

@@ -328,7 +328,8 @@ ReadView::~ReadView() {
 
 /** Constructor
 @param size		Number of views to pre-allocate */
-MVCC::MVCC(ulint size) : m_free(), m_views() {
+MVCC::MVCC(ulint size)
+    : m_free(&ReadView::m_view_list), m_views(&ReadView::m_view_list) {
   for (ulint i = 0; i < size; ++i) {
     ReadView *view = UT_NEW_NOKEY(ReadView());
 
@@ -337,7 +338,8 @@ MVCC::MVCC(ulint size) : m_free(), m_views() {
 }
 
 MVCC::~MVCC() {
-  while (ReadView *view = UT_LIST_GET_FIRST(m_free)) {
+  for (ReadView *view = UT_LIST_GET_FIRST(m_free); view != nullptr;
+       view = UT_LIST_GET_FIRST(m_free)) {
     UT_LIST_REMOVE(m_free, view);
 
     UT_DELETE(view);
@@ -698,7 +700,8 @@ ulint MVCC::size() const {
 
   ulint size = 0;
 
-  for (const ReadView *view : m_views) {
+  for (const ReadView *view = UT_LIST_GET_FIRST(m_views); view != nullptr;
+       view = UT_LIST_GET_NEXT(m_view_list, view)) {
     if (!view->is_closed()) {
       ++size;
     }

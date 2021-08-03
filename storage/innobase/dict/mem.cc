@@ -206,11 +206,11 @@ dict_table_t *dict_mem_table_create(
 
 #ifndef UNIV_HOTBACKUP
 #ifndef UNIV_LIBRARY
-  UT_LIST_INIT(table->locks);
+  lock_table_lock_list_init(&table->locks);
 #endif /* !UNIV_LIBRARY */
 #endif /* !UNIV_HOTBACKUP */
 
-  UT_LIST_INIT(table->indexes);
+  UT_LIST_INIT(table->indexes, &dict_index_t::indexes);
 
   table->heap = heap;
 

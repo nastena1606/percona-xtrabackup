@@ -167,7 +167,7 @@ wait_ex_event:	A thread may only wait on the wait_ex_event after it has
 */
 
 /** The global list of rw-locks */
-rw_lock_list_t rw_lock_list{};
+rw_lock_list_t rw_lock_list{&rw_lock_t::list};
 ib_mutex_t rw_lock_list_mutex;
 
 #ifdef UNIV_DEBUG
@@ -843,6 +843,8 @@ void rw_lock_remove_debug_info(rw_lock_t *lock, /*!< in: rw-lock */
                                ulint pass,      /*!< in: pass value */
                                ulint lock_type) /*!< in: lock type */
 {
+  rw_lock_debug_t *info;
+
   ut_ad(lock);
 
   if (pass == 0 && lock_type != RW_LOCK_X_WAIT) {
@@ -851,7 +853,8 @@ void rw_lock_remove_debug_info(rw_lock_t *lock, /*!< in: rw-lock */
 
   rw_lock_debug_mutex_enter();
 
-  for (auto info : lock->debug_list) {
+  for (info = UT_LIST_GET_FIRST(lock->debug_list); info != nullptr;
+       info = UT_LIST_GET_NEXT(list, info)) {
     if (pass == info->pass &&
         (pass != 0 || info->thread_id == std::this_thread::get_id()) &&
         info->lock_type == lock_type) {
@@ -876,7 +879,8 @@ bool rw_lock_own(const rw_lock_t *lock, ulint lock_type) {
 
   rw_lock_debug_mutex_enter();
 
-  for (const rw_lock_debug_t *info : lock->debug_list) {
+  for (const rw_lock_debug_t *info = UT_LIST_GET_FIRST(lock->debug_list);
+       info != nullptr; info = UT_LIST_GET_NEXT(list, info)) {
     if (info->thread_id == std::this_thread::get_id() && info->pass == 0 &&
         info->lock_type == lock_type) {
       rw_lock_debug_mutex_exit();
@@ -891,18 +895,21 @@ bool rw_lock_own(const rw_lock_t *lock, ulint lock_type) {
 }
 
 /** For collecting the debug information for a thread's rw-lock */
-typedef std::vector<const rw_lock_debug_t *> Infos;
+typedef std::vector<rw_lock_debug_t *> Infos;
 
 /** Get the thread debug info
 @param[in]	infos		The rw-lock mode owned by the threads
 @param[in]	lock		rw-lock to check
 @return the thread debug info or NULL if not found */
 static void rw_lock_get_debug_info(const rw_lock_t *lock, Infos *infos) {
+  rw_lock_debug_t *info = nullptr;
+
   ut_ad(rw_lock_validate(lock));
 
   rw_lock_debug_mutex_enter();
 
-  for (auto info : lock->debug_list) {
+  for (info = UT_LIST_GET_FIRST(lock->debug_list); info != nullptr;
+       info = UT_LIST_GET_NEXT(list, info)) {
     if (info->thread_id == std::this_thread::get_id()) {
       infos->push_back(info);
     }
@@ -922,7 +929,11 @@ bool rw_lock_own_flagged(const rw_lock_t *lock, rw_lock_flags_t flags) {
 
   rw_lock_get_debug_info(lock, &infos);
 
-  for (const rw_lock_debug_t *info : infos) {
+  Infos::const_iterator end = infos.end();
+
+  for (Infos::const_iterator it = infos.begin(); it != end; ++it) {
+    const rw_lock_debug_t *info = *it;
+
     ut_ad(info->thread_id == std::this_thread::get_id());
 
     if (info->pass != 0) {
@@ -968,7 +979,8 @@ void rw_lock_list_print_info(FILE *file) /*!< in: file where to print */
       "-------------\n",
       file);
 
-  for (const rw_lock_t *lock : rw_lock_list) {
+  for (const rw_lock_t *lock = UT_LIST_GET_FIRST(rw_lock_list); lock != nullptr;
+       lock = UT_LIST_GET_NEXT(list, lock)) {
     count++;
 
     if (lock->lock_word != X_LOCK_DECR) {
@@ -980,9 +992,12 @@ void rw_lock_list_print_info(FILE *file) /*!< in: file where to print */
         putc('\n', file);
       }
 
+      rw_lock_debug_t *info;
+
       rw_lock_debug_mutex_enter();
 
-      for (auto info : lock->debug_list) {
+      for (info = UT_LIST_GET_FIRST(lock->debug_list); info != nullptr;
+           info = UT_LIST_GET_NEXT(list, info)) {
         rw_lock_debug_print(file, info);
       }
 
@@ -1040,11 +1055,14 @@ std::string rw_lock_t::locked_from() const {
   rw_lock_get_debug_info(this, &infos);
 
   ulint i = 0;
+  Infos::const_iterator end = infos.end();
 
-  for (const rw_lock_debug_t *info : infos) {
+  for (Infos::const_iterator it = infos.begin(); it != end; ++it, ++i) {
+    const rw_lock_debug_t *info = *it;
+
     ut_ad(info->thread_id == std::this_thread::get_id());
 
-    if (i++ > 0) {
+    if (i > 0) {
       msg << ", ";
     }
 

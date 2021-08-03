@@ -721,8 +721,8 @@ static void opt_determine_and_normalize_test_conds(
 
   plan = sel_node_get_nth_plan(sel_node, i);
 
-  UT_LIST_INIT(plan->end_conds);
-  UT_LIST_INIT(plan->other_conds);
+  UT_LIST_INIT(plan->end_conds, &func_node_t::cond_list);
+  UT_LIST_INIT(plan->other_conds, &func_node_t::cond_list);
 
   /* Recursively go through the conjuncts and classify them */
 
@@ -753,6 +753,7 @@ void opt_find_all_cols(
   func_node_t *func_node;
   que_node_t *arg;
   sym_node_t *sym_node;
+  sym_node_t *col_node;
   ulint col_pos;
 
   if (exp == nullptr) {
@@ -784,7 +785,9 @@ void opt_find_all_cols(
   /* Look for an occurrence of the same column in the plan column
   list */
 
-  for (auto col_node : *col_list) {
+  col_node = UT_LIST_GET_FIRST(*col_list);
+
+  while (col_node) {
     if (col_node->col_no == sym_node->col_no) {
       if (col_node == sym_node) {
         /* sym_node was already in a list: do
@@ -799,6 +802,8 @@ void opt_find_all_cols(
 
       return;
     }
+
+    col_node = UT_LIST_GET_NEXT(col_var_list, col_node);
   }
 
   /* The same column did not occur in the list: add it */
@@ -882,7 +887,7 @@ static void opt_classify_cols(sel_node_t *sel_node, /*!< in: select node */
 
   plan->must_get_clust = FALSE;
 
-  UT_LIST_INIT(plan->columns);
+  UT_LIST_INIT(plan->columns, &sym_node_t::col_var_list);
 
   /* All select list columns should be copied: therefore TRUE as the
   first argument */

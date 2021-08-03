@@ -339,7 +339,10 @@ static trx_named_savept_t *trx_savepoint_find(
     trx_t *trx,       /*!< in: transaction */
     const char *name) /*!< in: savepoint name */
 {
-  for (auto savep : trx->trx_savepoints) {
+  trx_named_savept_t *savep;
+
+  for (savep = UT_LIST_GET_FIRST(trx->trx_savepoints); savep != nullptr;
+       savep = UT_LIST_GET_NEXT(trx_savepoints, savep)) {
     if (0 == ut_strcmp(savep->name, name)) {
       return (savep);
     }
@@ -716,6 +719,8 @@ void trx_rollback_or_clean_recovered(
 {
   ut_ad(!srv_read_only_mode);
 
+  trx_t *trx;
+
   ut_a(srv_force_recovery < SRV_FORCE_NO_TRX_UNDO);
   ut_ad(!all || trx_sys_need_rollback());
 
@@ -732,10 +737,11 @@ void trx_rollback_or_clean_recovered(
   /* Loop over the transaction list as long as there are
   recovered transactions to clean up or recover. */
 
-  trx_sys_mutex_enter();
-  for (bool need_one_more_scan = true; need_one_more_scan;) {
-    need_one_more_scan = false;
-    for (auto trx : trx_sys->rw_trx_list) {
+  do {
+    trx_sys_mutex_enter();
+
+    for (trx = UT_LIST_GET_FIRST(trx_sys->rw_trx_list); trx != nullptr;
+         trx = UT_LIST_GET_NEXT(trx_list, trx)) {
       assert_trx_in_rw_list(trx);
 
       /* In case of slow shutdown, we have to wait for the background
@@ -765,12 +771,14 @@ void trx_rollback_or_clean_recovered(
       we need to reacquire it before retrying the loop. */
       if (trx_rollback_or_clean_resurrected(trx, all)) {
         trx_sys_mutex_enter();
-        need_one_more_scan = true;
+
         break;
       }
     }
-  }
-  trx_sys_mutex_exit();
+
+    trx_sys_mutex_exit();
+
+  } while (trx != nullptr);
 
   if (all) {
     ib::info(ER_IB_MSG_TRX_RECOVERY_ROLLBACK_COMPLETED);

@@ -144,7 +144,7 @@ que_fork_t *que_fork_create(
 
   fork->graph = (graph != nullptr) ? graph : fork;
 
-  UT_LIST_INIT(fork->thrs);
+  UT_LIST_INIT(fork->thrs, &que_thr_t::thrs);
 
   return (fork);
 }
@@ -275,6 +275,7 @@ que_thr_t *que_fork_scheduler_round_robin(
  caller */
 que_thr_t *que_fork_start_command(que_fork_t *fork) /*!< in: a query fork */
 {
+  que_thr_t *thr;
   que_thr_t *suspended_thr = nullptr;
   que_thr_t *completed_thr = nullptr;
 
@@ -296,7 +297,8 @@ que_thr_t *que_fork_start_command(que_fork_t *fork) /*!< in: a query fork */
 
   /* We make a single pass over the thr list within which we note which
   threads are ready to run. */
-  for (auto thr : fork->thrs) {
+  for (thr = UT_LIST_GET_FIRST(fork->thrs); thr != nullptr;
+       thr = UT_LIST_GET_NEXT(thrs, thr)) {
     switch (thr->state) {
       case QUE_THR_COMMAND_WAIT:
 
@@ -330,7 +332,7 @@ que_thr_t *que_fork_start_command(que_fork_t *fork) /*!< in: a query fork */
         ut_error;
     }
   }
-  que_thr_t *thr;
+
   if (suspended_thr) {
     thr = suspended_thr;
     que_thr_move_to_run_state(thr);

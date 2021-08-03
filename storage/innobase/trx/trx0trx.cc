@@ -137,6 +137,8 @@ void trx_set_detailed_error_from_file(
   os_file_read_string(file, trx->detailed_error, MAX_DETAILED_ERROR_LEN);
 }
 
+trx_t::trx_t() : trx_savepoints{&trx_named_savept_t::trx_savepoints} {}
+
 /** Initialize transaction object.
  @param trx trx to initialize */
 static void trx_init(trx_t *trx) {
@@ -965,11 +967,15 @@ static void trx_resurrect_update(
 the time of a crash, they need to be undone.
 @param[in]	rseg	rollback segment */
 static void trx_resurrect(trx_rseg_t *rseg) {
+  trx_t *trx;
+  trx_undo_t *undo;
+
   ut_ad(rseg != nullptr);
 
   /* Resurrect transactions that were doing inserts. */
-  for (auto undo : rseg->insert_undo_list) {
-    auto trx = trx_resurrect_insert(undo, rseg);
+  for (undo = UT_LIST_GET_FIRST(rseg->insert_undo_list); undo != nullptr;
+       undo = UT_LIST_GET_NEXT(undo_list, undo)) {
+    trx = trx_resurrect_insert(undo, rseg);
 
     trx_sys_rw_trx_add(trx);
 
@@ -977,7 +983,8 @@ static void trx_resurrect(trx_rseg_t *rseg) {
   }
 
   /* Ressurrect transactions that were doing updates. */
-  for (auto undo : rseg->update_undo_list) {
+  for (undo = UT_LIST_GET_FIRST(rseg->update_undo_list); undo != nullptr;
+       undo = UT_LIST_GET_NEXT(undo_list, undo)) {
     /* Check the rw_trx_set first. */
     trx_t *trx;
     {
@@ -3120,6 +3127,7 @@ int trx_recover_for_mysql(
     ulint len,                /*!< in: number of slots in xid_list */
     MEM_ROOT *mem_root)       /*!< in: memory for table names */
 {
+  const trx_t *trx;
   ulint count = 0;
 
   ut_ad(txn_list);
@@ -3130,7 +3138,8 @@ int trx_recover_for_mysql(
 
   trx_sys_mutex_enter();
 
-  for (const trx_t *trx : trx_sys->rw_trx_list) {
+  for (trx = UT_LIST_GET_FIRST(trx_sys->rw_trx_list); trx != nullptr;
+       trx = UT_LIST_GET_NEXT(trx_list, trx)) {
     assert_trx_in_rw_list(trx);
 
     /* The state of a read-write transaction cannot change
@@ -3179,9 +3188,12 @@ static MY_ATTRIBUTE((warn_unused_result)) trx_t *trx_get_trx_by_xid_low(
     const XID *xid) /*!< in: X/Open XA transaction
                     identifier */
 {
+  trx_t *trx;
+
   ut_ad(trx_sys_mutex_own());
 
-  for (auto trx : trx_sys->rw_trx_list) {
+  for (trx = UT_LIST_GET_FIRST(trx_sys->rw_trx_list); trx != nullptr;
+       trx = UT_LIST_GET_NEXT(trx_list, trx)) {
     assert_trx_in_rw_list(trx);
 
     /* Most of the time server layer takes care of synchronizing access to a XID
@@ -3195,11 +3207,11 @@ static MY_ATTRIBUTE((warn_unused_result)) trx_t *trx_get_trx_by_xid_low(
       /* Invalidate the XID, so that subsequent calls
       will not find it. */
       trx->xid->reset();
-      return trx;
+      break;
     }
   }
 
-  return nullptr;
+  return (trx);
 }
 
 trx_t *trx_get_trx_by_xid(const XID *xid) {

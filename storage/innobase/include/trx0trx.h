@@ -557,7 +557,7 @@ Protected by exclusive lock_sys latch or trx->mutex combined with shared
 lock_sys latch (unless stated otherwise for particular field). */
 struct trx_lock_t {
   /** Default constructor. */
-  trx_lock_t() = default;
+  trx_lock_t();
 
   ulint n_active_thrs; /*!< number of active query threads */
 
@@ -856,7 +856,7 @@ struct trx_t {
   };
 
   /** Default constructor */
-  trx_t() = default;
+  trx_t();
 
   /** Mutex protecting the fields `state` and `lock` (except some fields of
   `lock`,  which are protected by lock_sys latches) */
@@ -1135,8 +1135,8 @@ struct trx_t {
                                    it is a stored procedure with a COMMIT
                                    WORK statement, for instance */
   /*------------------------------*/
-  UT_LIST_BASE_NODE_T_EXTERN(trx_named_savept_t, trx_savepoints)
-  trx_savepoints{}; /*!< savepoints set with SAVEPOINT ..., oldest first */
+  UT_LIST_BASE_NODE_T(trx_named_savept_t)
+  trx_savepoints; /*!< savepoints set with SAVEPOINT ..., oldest first */
   /*------------------------------*/
   UndoMutex undo_mutex; /*!< mutex protecting the fields in this
                         section (down to undo_no_arr), EXCEPT

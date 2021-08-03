@@ -3493,6 +3493,7 @@ static int i_s_innodb_temp_table_info_fill_table(
     Item *)             /*!< in: condition (ignored) */
 {
   int status = 0;
+  dict_table_t *table = nullptr;
 
   DBUG_TRACE;
 
@@ -3509,8 +3510,9 @@ static int i_s_innodb_temp_table_info_fill_table(
   temp_table_info_cache_t all_temp_info_cache;
   all_temp_info_cache.reserve(UT_LIST_GET_LEN(dict_sys->table_non_LRU));
 
-  dict_sys_mutex_enter();
-  for (auto table : dict_sys->table_non_LRU) {
+  mutex_enter(&dict_sys->mutex);
+  for (table = UT_LIST_GET_FIRST(dict_sys->table_non_LRU); table != nullptr;
+       table = UT_LIST_GET_NEXT(table_LRU, table)) {
     if (!table->is_temporary()) {
       continue;
     }
@@ -3524,8 +3526,10 @@ static int i_s_innodb_temp_table_info_fill_table(
   dict_sys_mutex_exit();
 
   /* Now populate the info to MySQL table */
-  for (const auto &info : all_temp_info_cache) {
-    status = i_s_innodb_temp_table_info_fill(thd, tables, &info);
+  temp_table_info_cache_t::const_iterator end = all_temp_info_cache.end();
+  for (temp_table_info_cache_t::const_iterator it = all_temp_info_cache.begin();
+       it != end; it++) {
+    status = i_s_innodb_temp_table_info_fill(thd, tables, &(*it));
     if (status) {
       break;
     }
